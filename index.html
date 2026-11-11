@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roleta de Bolas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f1226;
+    --bg2: #1b1f45;
+    --text: #f4f4ff;
+    --muted: #a7abd6;
+    --poke: #e53935;
+    --great: #1e88e5;
+    --gold: #f5b400;
+    --card: rgba(255,255,255,.06);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: "Fredoka", system-ui, sans-serif;
+    color: var(--text);
+    background: radial-gradient(circle at 50% 20%, var(--bg2), var(--bg) 70%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px 40px;
+    overflow-x: hidden;
+  }
+  h1 { margin: 0 0 4px; font-size: clamp(28px, 6vw, 44px); letter-spacing: .5px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+
+  .stage { position: relative; width: min(440px, 92vw); aspect-ratio: 1; }
+  .pointer {
+    position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+    width: 0; height: 0; z-index: 3;
+    border-left: 18px solid transparent; border-right: 18px solid transparent;
+    border-top: 34px solid #fff;
+    filter: drop-shadow(0 4px 4px rgba(0,0,0,.5));
+  }
+  .pointer.tick { animation: tick .12s ease-out; }
+  @keyframes tick { 50% { transform: translateX(-50%) rotate(-12deg); } }
+  #wheel {
+    width: 100%; height: 100%;
+    border-radius: 50%;
+    box-shadow: 0 0 0 10px #2a2f66, 0 0 0 14px #fff2, 0 20px 60px rgba(0,0,0,.6);
+    transform: rotate(0deg);
+  }
+  .hub {
+    position: absolute; inset: 0; margin: auto; width: 22%; height: 22%;
+    border-radius: 50%; z-index: 2; border: none; cursor: pointer;
+    background: radial-gradient(circle at 35% 30%, #fff, #d9dbf5 60%, #9aa0d8);
+    color: #1b1f45; font: 700 clamp(14px, 3.6vw, 20px) "Fredoka", sans-serif;
+    box-shadow: 0 6px 18px rgba(0,0,0,.5), inset 0 -4px 0 rgba(0,0,0,.15);
+    transition: transform .15s;
+  }
+  .hub:hover:not(:disabled) { transform: scale(1.06); }
+  .hub:disabled { cursor: default; opacity: .85; }
+
+  .odds { display: flex; gap: 12px; margin: 28px 0 0; flex-wrap: wrap; justify-content: center; }
+  .odd {
+    background: var(--card); border-radius: 14px; padding: 10px 14px;
+    display: flex; align-items: center; gap: 10px; min-width: 150px;
+  }
+  .odd svg { width: 34px; height: 34px; flex: none; }
+  .odd b { display: block; font-size: 15px; }
+  .odd small { color: var(--muted); font-size: 13px; }
+
+  .history { margin-top: 18px; color: var(--muted); font-size: 14px; text-align: center; }
+  .history button {
+    margin-left: 8px; background: none; border: 1px solid #fff3; color: var(--muted);
+    border-radius: 8px; padding: 2px 8px; font: inherit; cursor: pointer;
+  }
+
+  /* Resultado */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(5,6,20,.75); backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center; z-index: 10;
+    opacity: 0; pointer-events: none; transition: opacity .25s;
+  }
+  .overlay.show { opacity: 1; pointer-events: auto; }
+  .result {
+    background: linear-gradient(160deg, #262b63, #151937); border-radius: 24px;
+    padding: 28px 32px; text-align: center; width: min(340px, 90vw);
+    transform: scale(.7); transition: transform .35s cubic-bezier(.2,1.6,.4,1);
+    box-shadow: 0 20px 60px rgba(0,0,0,.6);
+  }
+  .overlay.show .result { transform: scale(1); }
+  /* Animação de captura: a bola cai, quica, balança 3 vezes com o botão piscando e trava com estrelas */
+  #resultBall { position: relative; width: 120px; height: 120px; margin: 0 auto; }
+  .result svg {
+    width: 120px; height: 120px; transform-origin: 50% 92%;
+    animation: drop .7s cubic-bezier(.3,0,.6,1), shake 2.7s .8s ease-in-out;
+  }
+  @keyframes drop {
+    0%   { transform: translateY(-320px) rotate(-360deg); }
+    55%  { transform: translateY(0) rotate(0); }
+    72%  { transform: translateY(-34px); }
+    86%  { transform: translateY(0); }
+    93%  { transform: translateY(-10px); }
+    100% { transform: translateY(0); }
+  }
+  @keyframes shake {
+    0%, 12%, 33%, 45%, 66%, 78%, 100% { transform: rotate(0); }
+    4%, 37%, 70% { transform: rotate(-24deg); }
+    8%, 41%, 74% { transform: rotate(20deg); }
+  }
+  .result .btn-core { animation: blink .9s .8s 3; }
+  @keyframes blink { 0%, 45%, 100% { fill: #fff; } 10%, 30% { fill: #ff5252; } }
+  .result.caught svg { animation: click .35s ease-out; }
+  @keyframes click { 0% { transform: scale(1); } 40% { transform: scale(.88); filter: brightness(.6); } 100% { transform: scale(1); } }
+  .result.caught .btn-core { animation: none; fill: #ffe082; }
+
+  .star {
+    position: absolute; left: 50%; top: 35%; font-size: 22px; color: #ffd740; opacity: 0;
+    text-shadow: 0 0 8px #ffb300; pointer-events: none;
+  }
+  .result.caught .star { animation: star .9s ease-out forwards; }
+  .star:nth-child(2) { --x: -70px; }
+  .star:nth-child(3) { --x: 0px; --y: -85px; }
+  .star:nth-child(4) { --x: 70px; }
+  @keyframes star {
+    0%   { opacity: 1; transform: translate(-50%, 0) scale(.3); }
+    60%  { opacity: 1; transform: translate(calc(-50% + var(--x, 0px)), var(--y, -60px)) scale(1.2) rotate(180deg); }
+    100% { opacity: 0; transform: translate(calc(-50% + var(--x, 0px) * 1.3), calc(var(--y, -60px) + 30px)) scale(.6) rotate(360deg); }
+  }
+
+  .result h2, .result p, .result button { opacity: 0; transition: opacity .3s; }
+  .result.caught h2, .result.caught p, .result.caught button { opacity: 1; }
+  .result h2 { margin: 12px 0 4px; font-size: 28px; }
+  .result p { margin: 0 0 18px; color: var(--muted); }
+  .result button {
+    background: #fff; color: #1b1f45; border: none; border-radius: 12px;
+    padding: 10px 22px; font: 700 16px "Fredoka", sans-serif; cursor: pointer;
+  }
+  .result.gold { box-shadow: 0 0 0 3px var(--gold), 0 0 60px rgba(245,180,0,.6); }
+
+  .confetti { position: fixed; top: -12px; width: 10px; height: 14px; z-index: 11; pointer-events: none;
+    animation: fall linear forwards; }
+  @keyframes fall { to { transform: translateY(110vh) rotate(720deg); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .result svg, .result .btn-core, .result.caught .star { animation: none; }
+  }
+</style>
+</head>
+<body>
+  <h1>Roleta de Bolas</h1>
+  <p class="sub">Clique em GIRAR e veja qual bola você ganha!</p>
+
+  <div class="stage">
+    <div class="pointer" id="pointer"></div>
+    <svg id="wheel" viewBox="-200 -200 400 400"></svg>
+    <button class="hub" id="spin">GIRAR</button>
+  </div>
+
+  <div class="odds" id="odds"></div>
+  <div class="history" id="history"></div>
+
+  <div class="overlay" id="overlay">
+    <div class="result" id="result">
+      <div id="resultBall"></div>
+      <h2 id="resultName"></h2>
+      <p id="resultText"></p>
+      <button id="again">Girar de novo</button>
+    </div>
+  </div>
+
+<script>
+  const PRIZES = {
+    poke:  { name: "Pokéball",  chance: 70, top: "#e53935", dark: "#b71c1c", slice: "#c62828", slice2: "#a31f1f" },
+    great: { name: "Greatball", chance: 25, top: "#1e88e5", dark: "#0d47a1", slice: "#1565c0", slice2: "#0f4f99" },
+    gold:  { name: "Goldball",  chance: 5,  top: "#f5b400", dark: "#b37f00", slice: "#e0a200", slice2: "#e0a200" },
+  };
+
+  // 20 fatias: 14 poke (70%), 5 great (25%), 1 gold (5%) — a roda mostra as mesmas proporções do sorteio
+  const SEGMENTS = ["gold","poke","poke","great","poke","poke","poke","great","poke","poke",
+                    "poke","great","poke","poke","poke","great","poke","poke","great","poke"];
+  const SEG_ANGLE = 360 / SEGMENTS.length;
+
+  function ballSVG(type, cx = 0, cy = 0, r = 50) {
+    const p = PRIZES[type];
+    const id = "g" + type + Math.random().toString(36).slice(2, 7);
+    const shine = type === "gold"
+      ? `<path d="M${cx - r*0.55},${cy - r*0.35} l${r*0.12},${-r*0.25} l${r*0.12},${r*0.25} l${-r*0.12},${r*0.25}z" fill="#fff" opacity=".9"/>`
+      : "";
+    return `
+      <defs>
+        <radialGradient id="${id}t" cx="35%" cy="25%" r="80%"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".35" stop-color="${p.top}"/><stop offset="1" stop-color="${p.dark}"/></radialGradient>
+        <radialGradient id="${id}b" cx="35%" cy="0%" r="90%"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#c9cbe0"/></radialGradient>
+      </defs>
+      <path d="M${cx - r},${cy} a${r},${r} 0 0 1 ${2*r},0z" fill="url(#${id}t)"/>
+      <path d="M${cx - r},${cy} a${r},${r} 0 0 0 ${2*r},0z" fill="url(#${id}b)"/>
+      ${type === "great" ? `<path d="M${cx - r*0.62},${cy - r*0.78} q${r*0.25},${r*0.35} ${r*0.1},${r*0.7}" stroke="#e53935" stroke-width="${r*0.18}" fill="none" stroke-linecap="round"/><path d="M${cx + r*0.62},${cy - r*0.78} q${-r*0.25},${r*0.35} ${-r*0.1},${r*0.7}" stroke="#e53935" stroke-width="${r*0.18}" fill="none" stroke-linecap="round"/>` : ""}
+      ${shine}
+      <rect x="${cx - r}" y="${cy - r*0.08}" width="${2*r}" height="${r*0.16}" fill="#1a1a2e"/>
+      <circle cx="${cx}" cy="${cy}" r="${r*0.3}" fill="#1a1a2e"/>
+      <circle class="btn-core" cx="${cx}" cy="${cy}" r="${r*0.19}" fill="#fff" stroke="#d0d2e6" stroke-width="${r*0.04}"/>
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#1a1a2e" stroke-width="${r*0.07}"/>`;
+  }
+
+  function buildWheel() {
+    const R = 195, wheel = document.getElementById("wheel");
+    let html = "";
+    SEGMENTS.forEach((type, i) => {
+      const a0 = (i * SEG_ANGLE - 90) * Math.PI / 180;
+      const a1 = ((i + 1) * SEG_ANGLE - 90) * Math.PI / 180;
+      const p = PRIZES[type];
+      const fill = i % 2 ? p.slice2 : p.slice;
+      html += `<path d="M0,0 L${R*Math.cos(a0)},${R*Math.sin(a0)} A${R},${R} 0 0 1 ${R*Math.cos(a1)},${R*Math.sin(a1)}z" fill="${fill}" stroke="#ffffff33" stroke-width="1.5"/>`;
+      const mid = i * SEG_ANGLE + SEG_ANGLE / 2;
+      html += `<g transform="rotate(${mid}) translate(0,-150) rotate(${-mid})">${ballSVG(type, 0, 0, 20)}</g>`;
+    });
+    // pinos na borda
+    SEGMENTS.forEach((_, i) => {
+      const a = (i * SEG_ANGLE - 90) * Math.PI / 180;
+      html += `<circle cx="${188*Math.cos(a)}" cy="${188*Math.sin(a)}" r="4" fill="#fff"/>`;
+    });
+    wheel.innerHTML = html;
+  }
+
+  function buildOdds() {
+    document.getElementById("odds").innerHTML = Object.entries(PRIZES).map(([k, p]) =>
+      `<div class="odd"><svg viewBox="-55 -55 110 110">${ballSVG(k)}</svg><div><b>${p.name}</b><small>${p.chance}% de chance</small></div></div>`
+    ).join("");
+  }
+
+  // Sorteio ponderado com números aleatórios criptográficos
+  function drawPrize() {
+    const n = crypto.getRandomValues(new Uint32Array(1))[0] / 2**32 * 100;
+    let acc = 0;
+    for (const [k, p] of Object.entries(PRIZES)) {
+      acc += p.chance;
+      if (n < acc) return k;
+    }
+    return "poke";
+  }
+
+  const counts = { poke: 0, great: 0, gold: 0 };
+  function renderHistory() {
+    const total = counts.poke + counts.great + counts.gold;
+    const el = document.getElementById("history");
+    if (!total) { el.textContent = "Nenhum giro ainda."; return; }
+    const pct = k => (counts[k] / total * 100).toFixed(1);
+    el.innerHTML = `${total} giro${total > 1 ? "s" : ""}: ` +
+      Object.keys(PRIZES).map(k => `${PRIZES[k].name} ${counts[k]} (${pct(k)}%)`).join(" · ") +
+      `<button id="reset">zerar</button>`;
+    document.getElementById("reset").onclick = () => { counts.poke = counts.great = counts.gold = 0; renderHistory(); };
+  }
+
+  let rotation = 0, spinning = false, catchTimer;
+  const wheel = document.getElementById("wheel");
+  const btn = document.getElementById("spin");
+  const pointer = document.getElementById("pointer");
+
+  function spin() {
+    if (spinning) return;
+    spinning = true; btn.disabled = true;
+
+    const prize = drawPrize();
+    const options = SEGMENTS.map((t, i) => t === prize ? i : -1).filter(i => i >= 0);
+    const seg = options[Math.floor(Math.random() * options.length)];
+    const jitter = (Math.random() - 0.5) * SEG_ANGLE * 0.7;
+    const center = seg * SEG_ANGLE + SEG_ANGLE / 2 + jitter;
+    const current = ((rotation % 360) + 360) % 360;
+    const delta = ((360 - center) - current + 720) % 360;
+    const start = rotation;
+    const target = rotation + 360 * 6 + delta;
+    const duration = 5200;
+    const t0 = performance.now();
+    let lastSeg = -1;
+
+    const ease = t => 1 - Math.pow(1 - t, 4);
+    function frame(now) {
+      const t = Math.min((now - t0) / duration, 1);
+      rotation = start + (target - start) * ease(t);
+      wheel.style.transform = `rotate(${rotation}deg)`;
+      // "tic" do ponteiro a cada fatia que passa
+      const under = Math.floor((((360 - rotation % 360) % 360) / SEG_ANGLE));
+      if (under !== lastSeg) {
+        lastSeg = under;
+        pointer.classList.remove("tick"); void pointer.offsetWidth; pointer.classList.add("tick");
+      }
+      if (t < 1) requestAnimationFrame(frame);
+      else finish(prize);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function finish(prize) {
+    counts[prize]++;
+    renderHistory();
+    const p = PRIZES[prize];
+    const card = document.getElementById("result");
+    card.classList.remove("caught");
+    document.getElementById("resultBall").innerHTML =
+      `<svg viewBox="-55 -55 110 110">${ballSVG(prize)}</svg><span class="star">★</span><span class="star">★</span><span class="star">★</span>`;
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    clearTimeout(catchTimer);
+    catchTimer = setTimeout(() => {
+      card.classList.add("caught");
+      if (prize !== "poke") confetti(prize === "gold" ? 140 : 50, prize);
+      spinning = false; btn.disabled = false;
+    }, reduced ? 0 : 3550);
+    document.getElementById("resultName").textContent = p.name + "!";
+    document.getElementById("resultText").textContent =
+      prize === "gold" ? "Sorte grande! Só 5% de chance." :
+      prize === "great" ? "Boa! 25% de chance." : "Você ganhou uma Pokéball.";
+    card.classList.toggle("gold", prize === "gold");
+    document.getElementById("overlay").classList.add("show");
+  }
+
+  function confetti(n, prize) {
+    const colors = prize === "gold" ? ["#f5b400", "#ffe082", "#fff"] : ["#1e88e5", "#90caf9", "#e53935", "#fff"];
+    for (let i = 0; i < n; i++) {
+      const c = document.createElement("div");
+      c.className = "confetti";
+      c.style.left = Math.random() * 100 + "vw";
+      c.style.background = colors[i % colors.length];
+      c.style.animationDuration = 2 + Math.random() * 2 + "s";
+      c.style.animationDelay = Math.random() * 0.6 + "s";
+      document.body.appendChild(c);
+      setTimeout(() => c.remove(), 5000);
+    }
+  }
+
+  function closeResult() { document.getElementById("overlay").classList.remove("show"); }
+  btn.onclick = spin;
+  document.getElementById("again").onclick = () => { closeResult(); setTimeout(spin, 250); };
+  document.getElementById("overlay").onclick = e => { if (e.target.id === "overlay" && !spinning) closeResult(); };
+
+  buildWheel(); buildOdds(); renderHistory();
+</script>
+</body>
+</html>
