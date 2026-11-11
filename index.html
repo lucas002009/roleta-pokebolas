@@ -23,15 +23,22 @@
     min-height: 100vh;
     font-family: "Fredoka", system-ui, sans-serif;
     color: var(--text);
-    background: radial-gradient(circle at 50% 20%, var(--bg2), var(--bg) 70%);
+    /* logo da loja ao fundo, escurecida para a roleta e o texto continuarem legíveis */
+    background:
+      linear-gradient(rgba(8,8,12,.45), rgba(8,8,12,.45)),
+      url("logo.jpg") center / auto 100vh no-repeat fixed,
+      #08080c;
     display: flex;
     flex-direction: column;
     align-items: center;
     padding: 8px 16px 18px;
     overflow-x: hidden;
   }
-  h1 { margin: 0 0 24px; font-size: clamp(22px, 4vh, 40px); line-height: 1.1; letter-spacing: .5px; }
+  h1 { margin: 0 0 2px; font-size: clamp(22px, 4vh, 40px); line-height: 1.1; letter-spacing: .5px; }
 
+  .sub { margin: 0 0 24px; font-size: clamp(14px, 2.4vh, 20px); text-shadow: 0 2px 6px #000; }
+  .sub b { color: #f5b400; }
+  h1 { text-shadow: 0 2px 8px #000; }
   .stage { position: relative; width: min(94vw, calc(100vh - 260px)); min-width: 260px; aspect-ratio: 1; }
   .pointer {
     position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
@@ -134,6 +141,7 @@
 </head>
 <body>
   <h1>Roleta de brindes</h1>
+  <p class="sub">Nos siga nas redes sociais <b>@basedoheroi</b></p>
 
   <div class="stage">
     <div class="pointer" id="pointer"></div>
