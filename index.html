@@ -23,11 +23,7 @@
     min-height: 100vh;
     font-family: "Fredoka", system-ui, sans-serif;
     color: var(--text);
-    /* logo da loja ao fundo, escurecida para a roleta e o texto continuarem legíveis */
-    background:
-      linear-gradient(rgba(8,8,12,.45), rgba(8,8,12,.45)),
-      url("logo.jpg") center / auto 100vh no-repeat fixed,
-      #08080c;
+    background: #08080c;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -36,6 +32,13 @@
   }
   h1 { margin: 0 0 2px; font-size: clamp(22px, 4vh, 40px); line-height: 1.1; letter-spacing: .5px; }
 
+  /* logo da loja ao fundo: recortada em círculo (o JPG tem cantos brancos) e escurecida para a roleta continuar legível */
+  body::before {
+    content: ""; position: fixed; z-index: -1; inset: 0; margin: auto;
+    width: min(100vh, 100vw); height: min(100vh, 100vw); border-radius: 50%;
+    background: url("logo.jpg") center / 101% no-repeat;
+    opacity: .6;
+  }
   .sub { margin: 0 0 24px; font-size: clamp(14px, 2.4vh, 20px); text-shadow: 0 2px 6px #000; }
   .sub b { color: #f5b400; }
   h1 { text-shadow: 0 2px 8px #000; }
