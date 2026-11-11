@@ -160,9 +160,8 @@
     gold:  { name: "Goldball",  chance: 5,  cards: 50,  top: "#f5b400", dark: "#b37f00", slice: "#e0a200", slice2: "#e0a200" },
   };
 
-  // 20 fatias: 14 poke (70%), 5 great (25%), 1 gold (5%) — a roda mostra as mesmas proporções do sorteio
-  const SEGMENTS = ["gold","poke","poke","great","poke","poke","poke","great","poke","poke",
-                    "poke","great","poke","poke","poke","great","poke","poke","great","poke"];
+  // 18 fatias, 6 de cada bola: a roda é só visual e não revela as chances (o sorteio usa PRIZES.chance)
+  const SEGMENTS = Array.from({ length: 18 }, (_, i) => ["poke", "great", "gold"][i % 3]);
   const SEG_ANGLE = 360 / SEGMENTS.length;
 
   function ballSVG(type, cx = 0, cy = 0, r = 50) {
@@ -193,7 +192,7 @@
       const a0 = (i * SEG_ANGLE - 90) * Math.PI / 180;
       const a1 = ((i + 1) * SEG_ANGLE - 90) * Math.PI / 180;
       const p = PRIZES[type];
-      const fill = i % 2 ? p.slice2 : p.slice;
+      const fill = p.slice;
       html += `<path d="M0,0 L${R*Math.cos(a0)},${R*Math.sin(a0)} A${R},${R} 0 0 1 ${R*Math.cos(a1)},${R*Math.sin(a1)}z" fill="${fill}" stroke="#ffffff33" stroke-width="1.5"/>`;
       const mid = i * SEG_ANGLE + SEG_ANGLE / 2;
       html += `<g transform="rotate(${mid}) translate(0,-150) rotate(${-mid})">${ballSVG(type, 0, 0, 20)}</g>`;
