@@ -43,14 +43,19 @@
     border-top: 34px solid #fff;
     filter: drop-shadow(0 4px 4px rgba(0,0,0,.5));
   }
-  .pointer.tick { animation: tick .12s ease-out; }
-  @keyframes tick { 50% { transform: translateX(-50%) rotate(-12deg); } }
+  /* A sombra fica num elemento parado: a camada que gira contém só a roda */
+  .stage::before {
+    content: ""; position: absolute; inset: 0; border-radius: 50%;
+    box-shadow: 0 0 0 10px #2a2f66, 0 0 0 14px #fff2, 0 20px 60px rgba(0,0,0,.6);
+  }
   #wheel {
+    display: block; position: relative;
     width: 100%; height: 100%;
     border-radius: 50%;
-    box-shadow: 0 0 0 10px #2a2f66, 0 0 0 14px #fff2, 0 20px 60px rgba(0,0,0,.6);
     transform: rotate(0deg);
   }
+  /* Só durante o giro: a roda vira uma textura na GPU e não é redesenhada a cada quadro */
+  #wheel.spinning { will-change: transform; }
   .hub {
     position: absolute; inset: 0; margin: auto; width: 22%; height: 22%;
     border-radius: 50%; z-index: 2; border: none; cursor: pointer;
@@ -64,7 +69,7 @@
 
   /* Resultado */
   .overlay {
-    position: fixed; inset: 0; background: rgba(5,6,20,.75); backdrop-filter: blur(4px);
+    position: fixed; inset: 0; background: rgba(5,6,20,.86);
     display: flex; align-items: center; justify-content: center; z-index: 10;
     opacity: 0; pointer-events: none; transition: opacity .25s;
   }
@@ -78,9 +83,16 @@
   .overlay.show .result { transform: scale(1); }
   /* Animação de captura: a bola cai, quica, balança 3 vezes com o botão piscando e trava com estrelas */
   #resultBall { position: relative; width: 120px; height: 120px; margin: 0 auto; }
-  .result svg {
-    width: 120px; height: 120px; transform-origin: 50% 92%;
+  .ball {
+    position: absolute; inset: 0; transform-origin: 50% 92%; will-change: transform;
     animation: drop .7s cubic-bezier(.3,0,.6,1), shake 2.7s .8s ease-in-out;
+  }
+  .ball svg { display: block; width: 120px; height: 120px; }
+  /* Luz do botão: elemento à parte animando só opacidade (não redesenha o SVG) */
+  .ball .core {
+    position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px;
+    border-radius: 50%; background: #ff5252; opacity: 0;
+    animation: blink .9s .8s 3;
   }
   @keyframes drop {
     0%   { transform: translateY(-320px) rotate(-360deg); }
@@ -95,11 +107,10 @@
     4%, 37%, 70% { transform: rotate(-24deg); }
     8%, 41%, 74% { transform: rotate(20deg); }
   }
-  .result .btn-core { animation: blink .9s .8s 3; }
-  @keyframes blink { 0%, 45%, 100% { fill: #fff; } 10%, 30% { fill: #ff5252; } }
-  .result.caught svg { animation: click .35s ease-out; }
+  @keyframes blink { 0%, 45%, 100% { opacity: 0; } 10%, 30% { opacity: 1; } }
+  .result.caught .ball { animation: click .35s ease-out; }
   @keyframes click { 0% { transform: scale(1); } 40% { transform: scale(.88); filter: brightness(.6); } 100% { transform: scale(1); } }
-  .result.caught .btn-core { animation: none; fill: #ffe082; }
+  .result.caught .core { animation: none; background: #ffe082; opacity: 1; }
 
   .star {
     position: absolute; left: 50%; top: 35%; font-size: 22px; color: #ffd740; opacity: 0;
@@ -126,12 +137,15 @@
   }
   .result.gold { box-shadow: 0 0 0 3px var(--gold), 0 0 60px rgba(245,180,0,.6); }
 
-  .confetti { position: fixed; top: -12px; width: 10px; height: 14px; z-index: 11; pointer-events: none;
-    animation: fall linear forwards; }
-  @keyframes fall { to { transform: translateY(110vh) rotate(720deg); } }
+  .mute {
+    position: fixed; top: 10px; right: 10px; z-index: 12; width: 44px; height: 44px;
+    border: none; border-radius: 50%; background: var(--card); color: var(--text);
+    font-size: 20px; line-height: 1; cursor: pointer;
+  }
+  #confetti { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 11; pointer-events: none; }
 
   @media (prefers-reduced-motion: reduce) {
-    .result svg, .result .btn-core, .result.caught .star { animation: none; }
+    .ball, .ball .core, .result.caught .star { animation: none; }
   }
 </style>
 </head>
@@ -154,6 +168,8 @@
       <button id="again">Girar de novo</button>
     </div>
   </div>
+  <canvas id="confetti" hidden></canvas>
+  <button class="mute" id="mute" aria-label="Ligar ou desligar o som">🔊</button>
 
 <script>
   const PRIZES = {
@@ -189,7 +205,7 @@
 
   function buildWheel() {
     const R = 195, wheel = document.getElementById("wheel");
-    let html = "";
+    let html = "<defs>" + Object.keys(PRIZES).map(t => `<g id="ball-${t}">${ballSVG(t, 0, 0, 20)}</g>`).join("") + "</defs>";
     SEGMENTS.forEach((type, i) => {
       const a0 = (i * SEG_ANGLE - 90) * Math.PI / 180;
       const a1 = ((i + 1) * SEG_ANGLE - 90) * Math.PI / 180;
@@ -197,7 +213,7 @@
       const fill = p.slice;
       html += `<path d="M0,0 L${R*Math.cos(a0)},${R*Math.sin(a0)} A${R},${R} 0 0 1 ${R*Math.cos(a1)},${R*Math.sin(a1)}z" fill="${fill}" stroke="#ffffff33" stroke-width="1.5"/>`;
       const mid = i * SEG_ANGLE + SEG_ANGLE / 2;
-      html += `<g transform="rotate(${mid}) translate(0,-150) rotate(${-mid})">${ballSVG(type, 0, 0, 20)}</g>`;
+      html += `<use href="#ball-${type}" transform="rotate(${mid}) translate(0,-150) rotate(${-mid})"/>`;
     });
     // pinos na borda
     SEGMENTS.forEach((_, i) => {
@@ -218,14 +234,98 @@
     return "poke";
   }
 
+  // ---------- Sonoplastia: tudo sintetizado com Web Audio, sem arquivos de áudio ----------
+  let actx, master, muted = false;
+  try { muted = localStorage.getItem("roleta-mudo") === "1"; } catch (e) {}
+  const VOLUME = 0.5;
+
+  // Cria o contexto de áudio no primeiro clique (os navegadores exigem um gesto do usuário)
+  function audio() {
+    if (!actx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      actx = new AC();
+      master = actx.createGain();
+      master.gain.value = muted ? 0 : VOLUME;
+      master.connect(actx.destination);
+    }
+    if (actx.state === "suspended") actx.resume();
+    return actx;
+  }
+
+  // Uma nota: freq inicial (Hz), início em segundos a partir de agora, duração
+  function tone(freq, at, dur, { type = "sine", gain = 0.2, to } = {}) {
+    if (muted) return;
+    const a = audio();
+    if (!a) return;
+    const t0 = a.currentTime + at, o = a.createOscillator(), g = a.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t0);
+    if (to) o.frequency.exponentialRampToValueAtTime(to, t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(gain, t0 + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(master);
+    o.start(t0); o.stop(t0 + dur + 0.03);
+  }
+
+  const sfx = {
+    // estalo do ponteiro em cada pino
+    tick() { tone(950, 0, 0.035, { type: "triangle", gain: 0.25, to: 480 }); },
+    // sincronizado com as animações "drop" (0,7 s) e "shake" (começa em 0,8 s)
+    capture() {
+      tone(900, 0, 0.38, { gain: 0.1, to: 220 });                       // queda
+      tone(150, 0.385, 0.16, { gain: 0.6, to: 55 });                    // 1º quique
+      tone(140, 0.6, 0.12, { gain: 0.35, to: 55 });                     // 2º quique
+      tone(130, 0.7, 0.09, { gain: 0.2, to: 55 });                      // 3º quique
+      for (const t of [0.908, 1.8, 2.69]) {                             // 3 balançadas
+        tone(520, t, 0.09, { type: "square", gain: 0.1, to: 420 });
+        tone(430, t + 0.11, 0.09, { type: "square", gain: 0.1, to: 350 });
+      }
+    },
+    // trava + fanfarra (maior quanto mais raro o brinde)
+    caught(prize) {
+      tone(1800, 0, 0.05, { type: "square", gain: 0.18, to: 600 });
+      const notes = { poke: [659, 880], great: [523, 659, 784, 1047], gold: [523, 659, 784, 1047, 1319, 1568] }[prize];
+      notes.forEach((f, i) => {
+        const last = i === notes.length - 1, t = 0.12 + i * 0.11;
+        tone(f, t, last ? 0.6 : 0.2, { type: "triangle", gain: 0.24 });
+        if (prize === "gold") tone(f * 2, t, last ? 0.8 : 0.2, { gain: 0.08 });   // brilho
+      });
+    },
+  };
+
+  const muteBtn = document.getElementById("mute");
+  function renderMute() { muteBtn.textContent = muted ? "🔇" : "🔊"; muteBtn.setAttribute("aria-pressed", muted); }
+  muteBtn.onclick = () => {
+    muted = !muted;
+    try { localStorage.setItem("roleta-mudo", muted ? "1" : "0"); } catch (e) {}
+    if (master) master.gain.value = muted ? 0 : VOLUME;
+    renderMute();
+  };
+  renderMute();
+
   let rotation = 0, spinning = false, catchTimer;
   const wheel = document.getElementById("wheel");
   const btn = document.getElementById("spin");
   const pointer = document.getElementById("pointer");
 
+  // "tic" do ponteiro: uma única animação reaproveitada, sem forçar reflow
+  const TICK_KF = ["0", "-12deg", "0"].map(r => ({ transform: `translateX(-50%) rotate(${r})` }));
+  let tickAnim, lastTick = 0;
+  function tick(now) {
+    if (now - lastTick < 60) return;   // em alta velocidade, no máximo ~16 tics/s
+    lastTick = now;
+    sfx.tick();
+    if (tickAnim) { tickAnim.currentTime = 0; tickAnim.play(); }
+    else tickAnim = pointer.animate(TICK_KF, { duration: 120, easing: "ease-out" });
+  }
+
   function spin() {
     if (spinning) return;
     spinning = true; btn.disabled = true;
+    wheel.classList.add("spinning");
+    audio();   // destrava o áudio dentro do clique
 
     const prize = drawPrize();
     const options = SEGMENTS.map((t, i) => t === prize ? i : -1).filter(i => i >= 0);
@@ -249,10 +349,10 @@
       const under = Math.floor((((360 - rotation % 360) % 360) / SEG_ANGLE));
       if (under !== lastSeg) {
         lastSeg = under;
-        pointer.classList.remove("tick"); void pointer.offsetWidth; pointer.classList.add("tick");
+        tick(now);
       }
       if (t < 1) requestAnimationFrame(frame);
-      else finish(prize);
+      else { wheel.classList.remove("spinning"); finish(prize); }
     }
     requestAnimationFrame(frame);
   }
@@ -262,11 +362,13 @@
     const card = document.getElementById("result");
     card.classList.remove("caught");
     document.getElementById("resultBall").innerHTML =
-      `<svg viewBox="-55 -55 110 110">${ballSVG(prize)}</svg><span class="star">★</span><span class="star">★</span><span class="star">★</span>`;
+      `<div class="ball"><svg viewBox="-55 -55 110 110">${ballSVG(prize)}</svg><i class="core"></i></div><span class="star">★</span><span class="star">★</span><span class="star">★</span>`;
     const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
     clearTimeout(catchTimer);
+    if (!reduced) sfx.capture();
     catchTimer = setTimeout(() => {
       card.classList.add("caught");
+      sfx.caught(prize);
       if (prize !== "poke") confetti(prize === "gold" ? 140 : 50, prize);
       spinning = false; btn.disabled = false;
     }, reduced ? 0 : 3550);
@@ -278,18 +380,42 @@
     document.getElementById("overlay").classList.add("show");
   }
 
+  // Confete num único canvas (antes: até 140 elementos, cada um com sua camada e seu timer)
+  const cv = document.getElementById("confetti"), ctx = cv.getContext("2d");
+  let parts = [], confRaf = 0, dpr = 1, viewH = 0;
+
   function confetti(n, prize) {
     const colors = prize === "gold" ? ["#f5b400", "#ffe082", "#fff"] : ["#1e88e5", "#90caf9", "#e53935", "#fff"];
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    viewH = innerHeight;
+    cv.width = innerWidth * dpr; cv.height = viewH * dpr;
+    cv.hidden = false;
+    const now = performance.now();
     for (let i = 0; i < n; i++) {
-      const c = document.createElement("div");
-      c.className = "confetti";
-      c.style.left = Math.random() * 100 + "vw";
-      c.style.background = colors[i % colors.length];
-      c.style.animationDuration = 2 + Math.random() * 2 + "s";
-      c.style.animationDelay = Math.random() * 0.6 + "s";
-      document.body.appendChild(c);
-      setTimeout(() => c.remove(), 5000);
+      parts.push({
+        x: Math.random() * innerWidth,
+        color: colors[i % colors.length],
+        t0: now + Math.random() * 600,
+        dur: 2000 + Math.random() * 2000,
+      });
     }
+    if (!confRaf) confRaf = requestAnimationFrame(confettiFrame);
+  }
+
+  function confettiFrame(now) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    parts = parts.filter(p => now - p.t0 < p.dur);
+    for (const p of parts) {
+      const k = (now - p.t0) / p.dur;
+      if (k < 0) continue;
+      const a = k * 4 * Math.PI, cos = Math.cos(a) * dpr, sin = Math.sin(a) * dpr;
+      ctx.setTransform(cos, sin, -sin, cos, (p.x + 5) * dpr, (k * viewH * 1.1 - 5) * dpr);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-5, -7, 10, 14);
+    }
+    if (parts.length) confRaf = requestAnimationFrame(confettiFrame);
+    else { confRaf = 0; cv.hidden = true; }
   }
 
   function closeResult() { document.getElementById("overlay").classList.remove("show"); }
